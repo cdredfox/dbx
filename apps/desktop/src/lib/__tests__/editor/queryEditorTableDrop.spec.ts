@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTableReferencePayload, parseTableReferencePayload, tableReferenceInsertText } from "@/lib/editor/queryEditorTableDrop";
+import { createColumnReferencePayload, createTableReferencePayload, parseTableReferencePayload, tableReferenceInsertText } from "@/lib/editor/queryEditorTableDrop";
 
 describe("query editor table reference drop", () => {
   it("inserts a quoted database name for database references", () => {
@@ -37,5 +37,87 @@ describe("query editor table reference drop", () => {
     })!;
 
     expect(parseTableReferencePayload(JSON.stringify(payload))).toEqual(payload);
+  });
+
+  it("creates a column-only payload without a source table", () => {
+    const payload = createColumnReferencePayload({
+      connectionId: "conn-1",
+      database: "app-db",
+      columnNames: ["id", "order no"],
+      databaseType: "mysql",
+    });
+
+    expect(payload).toEqual({
+      kind: "dbx-table-reference",
+      connectionId: "conn-1",
+      database: "app-db",
+      columnNames: ["id", "order no"],
+      referenceType: "column",
+      databaseType: "mysql",
+    } satisfies Partial<typeof payload>);
+    expect(payload && "tableName" in payload).toBe(false);
+  });
+
+  it("rejects column payloads without connection, database, or names", () => {
+    expect(createColumnReferencePayload({ database: "db", columnNames: ["id"] })).toBeNull();
+    expect(createColumnReferencePayload({ connectionId: "conn-1", columnNames: ["id"] })).toBeNull();
+    expect(createColumnReferencePayload({ connectionId: "conn-1", database: "db", columnNames: [] })).toBeNull();
+    expect(createColumnReferencePayload({ connectionId: "conn-1", database: "db", columnNames: ["", "  "] })).toBeNull();
+  });
+
+  it("trims surrounding whitespace from column names instead of inserting it verbatim", () => {
+    const payload = createColumnReferencePayload({
+      connectionId: "conn-1",
+      database: "db",
+      columnNames: [" id ", "name"],
+    })!;
+    expect(payload.columnNames).toEqual(["id", "name"]);
+  });
+
+  it("round-trips multi-column payloads and keeps legacy single-column payloads parseable", () => {
+    const multi = createColumnReferencePayload({
+      connectionId: "conn-1",
+      database: "app-db",
+      schema: "public",
+      columnNames: ["id", "name"],
+      databaseType: "postgres",
+    })!;
+    expect(parseTableReferencePayload(JSON.stringify(multi))).toEqual(multi);
+
+    const legacy = createTableReferencePayload({
+      connectionId: "conn-1",
+      database: "app-db",
+      tableName: "users",
+      columnName: "email",
+      databaseType: "postgres",
+    })!;
+    expect(parseTableReferencePayload(JSON.stringify(legacy))).toEqual(legacy);
+  });
+
+  it("inserts one dialect-quoted name per selected column joined by comma + newline", () => {
+    const mysql = createColumnReferencePayload({
+      connectionId: "conn-1",
+      database: "app-db",
+      columnNames: ["id", "order no", "created_at"],
+      databaseType: "mysql",
+    })!;
+    expect(tableReferenceInsertText(mysql)).toBe("`id`,\n`order no`,\n`created_at`");
+
+    const postgres = createColumnReferencePayload({
+      connectionId: "conn-1",
+      database: "app-db",
+      columnNames: ["id", "OrderNo"],
+      databaseType: "postgres",
+    })!;
+    expect(tableReferenceInsertText(postgres)).toBe('"id",\n"OrderNo"');
+  });
+
+  it("falls back to the editor database type when the payload omits one", () => {
+    const payload = createColumnReferencePayload({
+      connectionId: "conn-1",
+      database: "app-db",
+      columnNames: ["order no"],
+    })!;
+    expect(tableReferenceInsertText(payload, "mysql")).toBe("`order no`");
   });
 });
