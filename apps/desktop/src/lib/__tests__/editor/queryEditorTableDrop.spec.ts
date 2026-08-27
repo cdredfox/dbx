@@ -113,14 +113,25 @@ describe("query editor table reference drop", () => {
     expect(tableReferenceInsertText(postgres)).toBe('id,\n"OrderNo",\n"select"');
   });
 
-  it("keeps full quoting for dialects without smart-quote rules", () => {
+  it("keeps smart quoting for dialects without a dedicated keyword table", () => {
+    // 未知方言用通用保守判定：普通名裸输出，特殊字符走全量引号回退
+    const oracle = createColumnReferencePayload({
+      connectionId: "conn-1",
+      database: "app-db",
+      columnNames: ["id", "order no"],
+      databaseType: "oracle",
+    })!;
+    expect(tableReferenceInsertText(oracle)).toBe('id,\n"order no"');
+  });
+
+  it("bare-quotes sqlserver columns when safe and brackets reserved words", () => {
     const payload = createColumnReferencePayload({
       connectionId: "conn-1",
       database: "app-db",
-      columnNames: ["id", "name"],
-      databaseType: "oracle",
+      columnNames: ["id", "order", "order no"],
+      databaseType: "sqlserver",
     })!;
-    expect(tableReferenceInsertText(payload)).toBe('"id",\n"name"');
+    expect(tableReferenceInsertText(payload)).toBe("id,\n[order],\n[order no]");
   });
 
   it("falls back to the editor database type when the payload omits one", () => {

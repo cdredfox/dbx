@@ -2,13 +2,19 @@ import type { DatabaseType } from "@/types/database";
 import { qualifiedTableName, quoteTableIdentifier } from "@/lib/table/tableSelectSql";
 import { requiresMysqlIdentifierQuote, requiresPostgresIdentifierQuote } from "@/lib/sql/sqlIdentifier.ts";
 
-/** 智能引号覆盖的方言族：有可靠的保留字/合法字符判定，其余方言保守全量引号。 */
+/** 智能引号使用反引号的方言族。 */
 const SMART_QUOTE_BACKTICK_TYPES = new Set<DatabaseType>(["mysql", "clickhouse", "hive", "kyuubi", "impala", "spark", "databricks", "databend", "tdengine", "access", "doris", "starrocks", "goldendb"]);
+/** 智能引号使用双引号的方言族（SQL Server 方括号除外）。 */
 const SMART_QUOTE_DOUBLE_TYPES = new Set<DatabaseType>(["postgres", "gaussdb", "opengauss"]);
+/** SQL Server 族智能引号使用方括号。 */
+const SMART_QUOTE_BRACKET_TYPES = new Set<DatabaseType>(["sqlserver"]);
 
 /**
- * 列引用插入的按需引号：普通名称（非保留字、合法标识符字符）裸输出，
+ * 列引用插入的按需引号：普通名称（合法标识符字符、非保留字）裸输出，
  * 保留字或含特殊字符时按方言加引号。表名/库名仍走全量引号。
+ *
+ * MySQL/PG/SQL Server 族用各自的保留字判定；其余方言无专属保留字表，
+ * 用「严格标识符正则 + PG/MySQL 保留字并集」做通用保守判定。
  */
 function quoteColumnReferenceName(databaseType: DatabaseType | undefined, name: string): string {
   if (databaseType && SMART_QUOTE_BACKTICK_TYPES.has(databaseType)) {
@@ -18,7 +24,12 @@ function quoteColumnReferenceName(databaseType: DatabaseType | undefined, name: 
     // PG 族裸标识符会折叠为小写，混合大小写必须加引号保留原样。
     return requiresPostgresIdentifierQuote(name) ? `"${name.replace(/"/g, '""')}"` : name;
   }
-  return quoteTableIdentifier(databaseType, name);
+  if (databaseType && SMART_QUOTE_BRACKET_TYPES.has(databaseType)) {
+    return requiresPostgresIdentifierQuote(name) ? `[${name.replace(/\]/g, "]]")}]` : name;
+  }
+  // 其余方言：引号格式仍由 quoteTableIdentifier 按方言决定，是否加引号
+  // 用通用保守判定（严格标识符正则 + PG/MySQL 保留字并集）。
+  return requiresMysqlIdentifierQuote(name) ? quoteTableIdentifier(databaseType, name) : name;
 }
 
 export const DBX_TABLE_REFERENCE_MIME = "application/x-dbx-table-reference";
