@@ -1,5 +1,25 @@
 import type { DatabaseType } from "@/types/database";
 import { qualifiedTableName, quoteTableIdentifier } from "@/lib/table/tableSelectSql";
+import { requiresMysqlIdentifierQuote, requiresPostgresIdentifierQuote } from "@/lib/sql/sqlIdentifier.ts";
+
+/** 智能引号覆盖的方言族：有可靠的保留字/合法字符判定，其余方言保守全量引号。 */
+const SMART_QUOTE_BACKTICK_TYPES = new Set<DatabaseType>(["mysql", "clickhouse", "hive", "kyuubi", "impala", "spark", "databricks", "databend", "tdengine", "access", "doris", "starrocks", "goldendb"]);
+const SMART_QUOTE_DOUBLE_TYPES = new Set<DatabaseType>(["postgres", "gaussdb", "opengauss"]);
+
+/**
+ * 列引用插入的按需引号：普通名称（非保留字、合法标识符字符）裸输出，
+ * 保留字或含特殊字符时按方言加引号。表名/库名仍走全量引号。
+ */
+function quoteColumnReferenceName(databaseType: DatabaseType | undefined, name: string): string {
+  if (databaseType && SMART_QUOTE_BACKTICK_TYPES.has(databaseType)) {
+    return requiresMysqlIdentifierQuote(name) ? `\`${name.replace(/`/g, "``")}\`` : name;
+  }
+  if (databaseType && SMART_QUOTE_DOUBLE_TYPES.has(databaseType)) {
+    // PG 族裸标识符会折叠为小写，混合大小写必须加引号保留原样。
+    return requiresPostgresIdentifierQuote(name) ? `"${name.replace(/"/g, '""')}"` : name;
+  }
+  return quoteTableIdentifier(databaseType, name);
+}
 
 export const DBX_TABLE_REFERENCE_MIME = "application/x-dbx-table-reference";
 export const DBX_TABLE_REFERENCE_DROP_EVENT = "dbx-table-reference-drop";
@@ -187,7 +207,7 @@ export function tableReferenceInsertText(payload: QueryEditorTableReferencePaylo
   }
   const columnNames = payload.columnNames?.length ? payload.columnNames : payload.columnName ? [payload.columnName] : [];
   if (payload.referenceType === "column" && columnNames.length > 0) {
-    return columnNames.map((name) => quoteTableIdentifier(databaseType, name)).join(",\n");
+    return columnNames.map((name) => quoteColumnReferenceName(databaseType, name)).join(",\n");
   }
   const tableName = payload.tableName || payload.database;
   return qualifiedTableName({

@@ -94,22 +94,33 @@ describe("query editor table reference drop", () => {
     expect(parseTableReferencePayload(JSON.stringify(legacy))).toEqual(legacy);
   });
 
-  it("inserts one dialect-quoted name per selected column joined by comma + newline", () => {
+  it("inserts smart-quoted names per selected column joined by comma + newline", () => {
+    // 普通名称裸输出，保留字/含特殊字符才加方言引号
     const mysql = createColumnReferencePayload({
       connectionId: "conn-1",
       database: "app-db",
-      columnNames: ["id", "order no", "created_at"],
+      columnNames: ["id", "order no", "order", "created_at"],
       databaseType: "mysql",
     })!;
-    expect(tableReferenceInsertText(mysql)).toBe("`id`,\n`order no`,\n`created_at`");
+    expect(tableReferenceInsertText(mysql)).toBe("id,\n`order no`,\n`order`,\ncreated_at");
 
     const postgres = createColumnReferencePayload({
       connectionId: "conn-1",
       database: "app-db",
-      columnNames: ["id", "OrderNo"],
+      columnNames: ["id", "OrderNo", "select"],
       databaseType: "postgres",
     })!;
-    expect(tableReferenceInsertText(postgres)).toBe('"id",\n"OrderNo"');
+    expect(tableReferenceInsertText(postgres)).toBe('id,\n"OrderNo",\n"select"');
+  });
+
+  it("keeps full quoting for dialects without smart-quote rules", () => {
+    const payload = createColumnReferencePayload({
+      connectionId: "conn-1",
+      database: "app-db",
+      columnNames: ["id", "name"],
+      databaseType: "oracle",
+    })!;
+    expect(tableReferenceInsertText(payload)).toBe('"id",\n"name"');
   });
 
   it("falls back to the editor database type when the payload omits one", () => {
