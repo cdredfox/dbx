@@ -773,6 +773,55 @@ describe("useDataGridColumnLayout", () => {
     scope.stop();
   });
 
+  it("blocks native selection and drag while dragging columns", () => {
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        callback(0);
+        return 0;
+      }),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    const header = document.createElement("div");
+    const column = document.createElement("div");
+    column.dataset.visibleColIndex = "0";
+    column.getBoundingClientRect = () => ({ left: 0, width: 100, right: 100, top: 0, bottom: 20, height: 20, x: 0, y: 0, toJSON: () => ({}) });
+    header.append(column);
+
+    const scope = effectScope();
+    const layout = scope.run(() =>
+      useDataGridColumnLayout({
+        columnNames: ref(["id", "name"]),
+        visibleColumnIndexes: ref([0, 1]),
+        renderedColumnWidths: ref([100, 100]),
+        scrollLeft: ref(0),
+        viewportWidth: ref(400),
+        rowNumberWidth: 40,
+        headerRef: ref(header),
+      }),
+    )!;
+
+    layout.startColumnHeaderDrag(0, new PointerEvent("pointerdown", { button: 0, clientX: 50, clientY: 10 }));
+
+    // 拖拽期间原生选择与拖拽启动被拦截
+    const selectStart = new Event("selectstart", { cancelable: true });
+    document.dispatchEvent(selectStart);
+    expect(selectStart.defaultPrevented).toBe(true);
+    const dragStart = new Event("dragstart", { cancelable: true });
+    document.dispatchEvent(dragStart);
+    expect(dragStart.defaultPrevented).toBe(true);
+
+    window.dispatchEvent(new PointerEvent("pointerup", { clientX: 150, clientY: 10 }));
+    expect(document.body.style.userSelect).toBe("");
+
+    // 手势结束后恢复原生效行为
+    const laterSelect = new Event("selectstart", { cancelable: true });
+    document.dispatchEvent(laterSelect);
+    expect(laterSelect.defaultPrevented).toBe(false);
+    scope.stop();
+  });
+
   it("uses the edge after frozen columns as the left auto-scroll trigger", () => {
     const frames = new Map<number, FrameRequestCallback>();
     let nextFrame = 1;

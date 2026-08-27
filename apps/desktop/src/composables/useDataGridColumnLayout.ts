@@ -726,6 +726,8 @@ export function useDataGridColumnLayout(options: {
     window.removeEventListener("pointerup", onColumnHeaderPointerUp, true);
     window.removeEventListener("pointercancel", onColumnHeaderPointerCancel, true);
     window.removeEventListener("blur", onColumnHeaderPointerCancel, true);
+    document.removeEventListener("selectstart", blockColumnHeaderNativeInteraction, true);
+    document.removeEventListener("dragstart", blockColumnHeaderNativeInteraction, true);
     cancelColumnHeaderDragPreview();
     removeColumnHeaderDragPreview(state);
     document.body.style.userSelect = "";
@@ -832,6 +834,11 @@ export function useDataGridColumnLayout(options: {
     stopColumnHeaderDrag(false);
   }
 
+  /** 拖拽期间拦截原生文本选择与 HTML5 拖拽启动，防止其抢占指针事件流。 */
+  function blockColumnHeaderNativeInteraction(event: Event) {
+    event.preventDefault();
+  }
+
   function startColumnHeaderDrag(visibleColIdx: number, event: PointerEvent) {
     if (event.button !== 0 || options.getIsResizing?.() || columnHeaderInteractiveTarget(event.target)) return;
     const scroller = options.getScrollElement?.();
@@ -839,6 +846,11 @@ export function useDataGridColumnLayout(options: {
     const columnRects = columnHeaderLayoutRects();
     const sourceRect = columnRects.find((rect) => rect.visibleIndex === visibleColIdx);
     const dragCenterClientOffsetX = sourceRect ? sourceRect.left + sourceRect.width / 2 - event.clientX : 0;
+    // 阻止原生文本选择/HTML5 拖拽抢占事件流：一旦发生会派发 pointercancel 并停发 pointermove，
+    // 手势将被冻结（表现为拖不动）。参照侧边栏表引用路径在起点即禁用。
+    event.preventDefault();
+    document.addEventListener("selectstart", blockColumnHeaderNativeInteraction, true);
+    document.addEventListener("dragstart", blockColumnHeaderNativeInteraction, true);
     columnHeaderDragState.value = {
       sourceVisibleIndex: visibleColIdx,
       targetVisibleIndex: visibleColIdx,
