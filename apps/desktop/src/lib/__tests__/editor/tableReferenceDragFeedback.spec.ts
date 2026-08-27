@@ -22,6 +22,29 @@ describe("isOverSqlEditorTarget", () => {
     document.elementFromPoint = () => document.body;
     expect(isOverSqlEditorTarget(10, 10)).toBe(false);
   });
+
+  it("falls back to geometric bounds when elementFromPoint hits an overlay", () => {
+    const editor = document.createElement("div");
+    editor.setAttribute("data-query-editor-root", "");
+    Object.defineProperty(editor, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, right: 400, bottom: 300 }),
+    });
+    document.body.appendChild(editor);
+
+    // 命中被透明覆盖层拦截时，回退为编辑器包围盒判定。
+    document.elementFromPoint = () => null;
+    expect(isOverSqlEditorTarget(10, 10)).toBe(true);
+    // 覆盖层命中但不落在任何编辑器包围盒内仍为 false。
+    const farEditor = document.createElement("div");
+    farEditor.setAttribute("data-query-editor-root", "");
+    Object.defineProperty(farEditor, "getBoundingClientRect", {
+      value: () => ({ left: 500, top: 500, right: 900, bottom: 800 }),
+    });
+    document.body.appendChild(farEditor);
+    document.elementFromPoint = () => null;
+    expect(isOverSqlEditorTarget(450, 450)).toBe(false);
+    expect(isOverSqlEditorTarget(600, 600)).toBe(true);
+  });
 });
 
 describe("beginTableReferenceDragFeedback", () => {

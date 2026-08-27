@@ -14,7 +14,13 @@ const CHIP_VIEWPORT_MARGIN = 8;
 
 export function isOverSqlEditorTarget(clientX: number, clientY: number, doc: Document = document): boolean {
   const target = doc.elementFromPoint(clientX, clientY);
-  return target instanceof Element && target.closest(QUERY_EDITOR_DROP_TARGET_SELECTOR) !== null;
+  if (target instanceof Element && target.closest(QUERY_EDITOR_DROP_TARGET_SELECTOR) !== null) return true;
+  // elementFromPoint 可能被透明覆盖层拦截（面板层等），回退为编辑器根节点包围盒的几何包含判定。
+  for (const root of doc.querySelectorAll(QUERY_EDITOR_DROP_TARGET_SELECTOR)) {
+    const rect = root.getBoundingClientRect();
+    if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) return true;
+  }
+  return false;
 }
 
 /** 多列摘要由 i18n 插值完成：调用方以 { names: 前两个列名, count: 总数 } 调 t("grid.columnDragChipMany", ...)。 */
