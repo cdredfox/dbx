@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it } from "vitest";
-import { beginTableReferenceDragFeedback, isOverSqlEditorTarget } from "@/lib/editor/tableReferenceDragFeedback";
+import { beginTableReferenceDragFeedback, isOverSqlEditorTarget, isPointOverElementRoot } from "@/lib/editor/tableReferenceDragFeedback";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -44,6 +44,35 @@ describe("isOverSqlEditorTarget", () => {
     document.elementFromPoint = () => null;
     expect(isOverSqlEditorTarget(450, 450)).toBe(false);
     expect(isOverSqlEditorTarget(600, 600)).toBe(true);
+  });
+});
+
+describe("isPointOverElementRoot", () => {
+  it("requires elementFromPoint to hit inside the given root", () => {
+    const editor = document.createElement("div");
+    const inner = document.createElement("textarea");
+    editor.appendChild(inner);
+    document.body.appendChild(editor);
+
+    document.elementFromPoint = () => inner;
+    expect(isPointOverElementRoot(10, 10, editor)).toBe(true);
+    document.elementFromPoint = () => document.body;
+    expect(isPointOverElementRoot(10, 10, editor)).toBe(false);
+    expect(isPointOverElementRoot(10, 10, null)).toBe(false);
+  });
+
+  it("falls back to the root bounding box when elementFromPoint hits an overlay", () => {
+    const editor = document.createElement("div");
+    Object.defineProperty(editor, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, right: 400, bottom: 300 }),
+    });
+    document.body.appendChild(editor);
+
+    // 覆盖层拦截时回退为传入根节点的包围盒判定。
+    const overlay = document.createElement("div");
+    document.elementFromPoint = () => overlay;
+    expect(isPointOverElementRoot(10, 10, editor)).toBe(true);
+    expect(isPointOverElementRoot(450, 450, editor)).toBe(false);
   });
 });
 

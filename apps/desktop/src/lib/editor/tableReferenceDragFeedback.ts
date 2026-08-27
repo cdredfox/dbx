@@ -12,13 +12,21 @@ const CHIP_OFFSET_X = 14;
 const CHIP_OFFSET_Y = 18;
 const CHIP_VIEWPORT_MARGIN = 8;
 
-export function isOverSqlEditorTarget(clientX: number, clientY: number, doc: Document = document): boolean {
+/**
+ * elementFromPoint 命中 root 内部才算命中；elementFromPoint 可能被透明覆盖层
+ * 拦截（面板层等），此时回退为 root 包围盒的几何包含判定。
+ */
+export function isPointOverElementRoot(clientX: number, clientY: number, root: Element | null | undefined, doc: Document = document): boolean {
+  if (!root) return false;
   const target = doc.elementFromPoint(clientX, clientY);
-  if (target instanceof Element && target.closest(QUERY_EDITOR_DROP_TARGET_SELECTOR) !== null) return true;
-  // elementFromPoint 可能被透明覆盖层拦截（面板层等），回退为编辑器根节点包围盒的几何包含判定。
+  if (target instanceof Element && root.contains(target)) return true;
+  const rect = root.getBoundingClientRect();
+  return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+}
+
+export function isOverSqlEditorTarget(clientX: number, clientY: number, doc: Document = document): boolean {
   for (const root of doc.querySelectorAll(QUERY_EDITOR_DROP_TARGET_SELECTOR)) {
-    const rect = root.getBoundingClientRect();
-    if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) return true;
+    if (isPointOverElementRoot(clientX, clientY, root, doc)) return true;
   }
   return false;
 }

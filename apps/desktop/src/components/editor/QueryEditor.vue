@@ -108,6 +108,7 @@ import {
   type QueryEditorTableReferenceHoverDetail,
   type QueryEditorTableReferencePayload,
 } from "@/lib/editor/queryEditorTableDrop";
+import { isPointOverElementRoot } from "@/lib/editor/tableReferenceDragFeedback";
 import type { SqlHighlighter } from "@/lib/sql/sqlHighlighter";
 import { EDITOR_FONT_FAMILY_CSS_VAR, EDITOR_FONT_SIZE_CSS_VAR, editorDiagnosticColors, editorThemeAppearanceFor, loadEditorTheme, editorFontTheme, shellLineCommentTheme, sqlCompletionTheme, sqlSemanticHighlightTheme } from "@/lib/editor/editorThemes";
 import { createStatementGutterMarkerDom, shouldShowStatementGutter } from "@/lib/editor/codemirrorStatementGutter";
@@ -3307,8 +3308,8 @@ function onTableReferenceDropEvent(event: Event) {
   if (!currentView || props.readOnly || !(event instanceof CustomEvent)) return;
   const detail = event.detail as QueryEditorTableReferenceDropDetail | undefined;
   if (!detail?.payload) return;
-  const target = document.elementFromPoint(detail.clientX, detail.clientY);
-  if (target instanceof Element && editorRef.value?.contains(target)) {
+  // elementFromPoint 被透明覆盖层拦截时回退为编辑器根节点包围盒判定（见 isPointOverElementRoot）。
+  if (isPointOverElementRoot(detail.clientX, detail.clientY, editorRef.value)) {
     insertTableReferencePayload(currentView, detail.payload, detail);
   }
 }
@@ -3353,8 +3354,8 @@ function onTableReferenceHoverEvent(event: Event) {
   if (!(event instanceof CustomEvent)) return;
   const detail = event.detail as QueryEditorTableReferenceHoverDetail | undefined;
   if (!detail) return;
-  const target = document.elementFromPoint(detail.clientX, detail.clientY);
-  if (!(target instanceof Element) || !editorRef.value?.contains(target)) {
+  // elementFromPoint 被透明覆盖层拦截时回退为编辑器根节点包围盒判定（见 isPointOverElementRoot）。
+  if (!isPointOverElementRoot(detail.clientX, detail.clientY, editorRef.value)) {
     hideQueryEditorDropCaret();
     return;
   }
